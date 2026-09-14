@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
@@ -14,6 +15,7 @@ export default function TeamRecommendation() {
   const location = useLocation();
 
   const data = location.state || {};
+  const taskId = data.task_id || "TSK000001";
 
   const project = data.project || {
     name: "Payment Gateway Integration",
@@ -28,7 +30,7 @@ export default function TeamRecommendation() {
     { name: "REST APIs", level: "Advanced" },
   ];
 
-  const recommendedTeam = [
+  const fallbackTeam = [
     {
       name: "Sarah Johnson",
       role: "Backend Developer",
@@ -61,7 +63,7 @@ export default function TeamRecommendation() {
     },
   ];
 
-  const alternatives = [
+  const fallbackAlternatives = [
     {
       name: "David Wilson",
       role: "Backend Developer",
@@ -73,6 +75,49 @@ export default function TeamRecommendation() {
       match: 81,
     },
   ];
+
+  const [recommendedTeam, setRecommendedTeam] = useState(fallbackTeam);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
+    fetch(`${apiUrl}/recommendations/${taskId}`)
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error("Recommendation request failed");
+        }
+
+        return response.json();
+      })
+      .then((result) => {
+        if (cancelled || !result.recommendations?.length) {
+          return;
+        }
+
+        setRecommendedTeam(
+          result.recommendations.map((member) => ({
+            name: member.employee_name || `Employee ${member.employee_id}`,
+            role: "Recommended team member",
+            match: member.match_score,
+            availability: `${member.availability_score}% available`,
+            experience: `${member.experience_match}% experience match`,
+            skills: [`${member.skill_match}% skill match`],
+            reason: member.reason,
+          }))
+        );
+      })
+      .catch(() => {
+        // Keep the local preview when the API is unavailable.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [taskId]);
+
+  const alternatives = fallbackAlternatives;
 
   const handleApprove = () => {
   navigate("/projects/details", {

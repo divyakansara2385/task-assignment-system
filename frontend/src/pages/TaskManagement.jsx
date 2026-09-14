@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { getTasks } from "../services/api";
 import {
   Search,
   Plus,
@@ -11,7 +12,17 @@ import {
 
 export default function TaskManagement() {
   const [search, setSearch] = useState("");
+  const [apiTasks, setApiTasks] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const navigate = useNavigate();
+
+  useEffect(() => {
+    getTasks()
+      .then(setApiTasks)
+      .catch(() => setError("Task data could not be loaded."))
+      .finally(() => setLoading(false));
+  }, []);
 
   const tasks = [
     {
@@ -66,8 +77,19 @@ export default function TaskManagement() {
     },
   ];
 
+  const displayedTasks = apiTasks?.map((task) => ({
+    id: task.task_id,
+    title: task.task_title || "Untitled task",
+    project: task.project_id,
+    assignee: "Unassigned",
+    initials: "--",
+    priority: task.priority || "Medium",
+    status: "Pending",
+    deadline: task.task_due_date || "No deadline",
+  })) || tasks;
+
   // Search filtering
-  const filteredTasks = tasks.filter((task) => {
+  const filteredTasks = displayedTasks.filter((task) => {
     const searchText = search.toLowerCase();
 
     return (
@@ -78,20 +100,23 @@ export default function TaskManagement() {
   });
 
   // Statistics
-  const completedTasks = tasks.filter(
+  const completedTasks = displayedTasks.filter(
     (task) => task.status === "Completed"
   ).length;
 
-  const inProgressTasks = tasks.filter(
+  const inProgressTasks = displayedTasks.filter(
     (task) => task.status === "In Progress"
   ).length;
 
-  const pendingTasks = tasks.filter(
+  const pendingTasks = displayedTasks.filter(
     (task) => task.status === "Pending"
   ).length;
 
   return (
     <div className="task-management-page">
+
+      {loading && <p>Loading tasks...</p>}
+      {error && <p className="form-error">{error}</p>}
 
       {/* ================= HEADER ================= */}
 
@@ -130,7 +155,7 @@ export default function TaskManagement() {
 
           <div>
             <span>Total Tasks</span>
-            <strong>{tasks.length}</strong>
+            <strong>{displayedTasks.length}</strong>
           </div>
 
         </div>

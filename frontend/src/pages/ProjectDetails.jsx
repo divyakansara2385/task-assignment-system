@@ -1,4 +1,6 @@
-import { useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { getAssignments, getEmployees, getProject, getTasks } from "../services/api";
 import {
   ArrowLeft,
   Users,
@@ -13,8 +15,9 @@ import {
 export default function ProjectDetails() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { id } = useParams();
 
-  const project = location.state?.project || {
+  const fallbackProject = location.state?.project || {
     name: "Payment Gateway Integration",
     description:
       "Integrate a secure payment orchestration platform with multi-currency support and automated reconciliation workflows.",
@@ -22,6 +25,56 @@ export default function ProjectDetails() {
     priority: "medium",
     deadline: "2026-10-15",
   };
+  const [project, setProject] = useState(fallbackProject);
+  const [apiTasks, setApiTasks] = useState([]);
+  const [apiTeam, setApiTeam] = useState([]);
+  const [loading, setLoading] = useState(Boolean(id));
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!id) return;
+
+    Promise.all([getProject(id), getTasks(), getAssignments(), getEmployees()])
+      .then(([result, allTasks, assignments, employees]) => {
+        const projectTasks = allTasks.filter((task) => task.project_id === id);
+        const projectTaskIds = new Set(projectTasks.map((task) => task.task_id));
+        const projectAssignments = assignments.filter((assignment) => projectTaskIds.has(assignment.task_id));
+        const employeeMap = new Map(employees.map((employee) => [String(employee.employee_id), employee]));
+
+        setProject({
+          ...result,
+          name: result.project_domain || result.project_id,
+          description: result.project_type || "",
+          teamSize: "Not specified",
+          priority: result.priority || "Not specified",
+          deadline: result.end_date || "Not specified",
+        });
+        setApiTasks(projectTasks.map((task) => {
+          const assignment = projectAssignments.find((item) => item.task_id === task.task_id);
+          const employee = assignment
+            ? employeeMap.get(String(assignment.employee_id))
+            : null;
+          return {
+            ...task,
+            assignment,
+            assigneeName: employee?.name || (assignment ? `Employee ${assignment.employee_id}` : "Unassigned"),
+          };
+        }));
+        setApiTeam(projectAssignments.map((assignment) => {
+          const employee = employeeMap.get(String(assignment.employee_id));
+          const name = employee?.name || `Employee ${assignment.employee_id}`;
+          return {
+            name,
+            initials: name.slice(0, 2).toUpperCase(),
+            role: employee?.role || "Team member",
+            match: null,
+            status: assignment.status || "Assigned",
+          };
+        }));
+      })
+      .catch(() => setError("Project details could not be loaded."))
+      .finally(() => setLoading(false));
+  }, [id]);
 
   const team = [
     {
@@ -68,8 +121,28 @@ export default function ProjectDetails() {
     },
   ];
 
+  const displayedTasks = apiTasks.length ? apiTasks.map((task) => ({
+    title: task.task_title || "Untitled task",
+    assignee: task.assigneeName || "Unassigned",
+    status: task.assignment?.status || "Pending",
+    priority: task.priority || "Medium",
+    assigned: Boolean(task.assignment),
+  })) : tasks;
+  const displayedTeam = apiTeam.length ? apiTeam : team;
+  const projectProgress = displayedTasks.length
+    ? Math.round(displayedTasks.reduce((total, task) => {
+      if (task.status === "COMPLETED" || task.status === "Completed") return total + 100;
+      if (task.status === "IN_PROGRESS" || task.status === "In Progress") return total + 50;
+      if (task.assigned) return total + 25;
+      return total;
+    }, 0) / displayedTasks.length)
+    : 0;
+
   return (
     <div className="project-details-page">
+
+      {loading && <p>Loading project...</p>}
+      {error && <p className="form-error">{error}</p>}
 
       {/* Back */}
 
@@ -132,7 +205,7 @@ export default function ProjectDetails() {
             <span>Team Members</span>
 
             <strong>
-              {team.length}
+              {displayedTeam.length}
             </strong>
           </div>
 
@@ -145,7 +218,7 @@ export default function ProjectDetails() {
           <div>
             <span>Progress</span>
 
-            <strong>35%</strong>
+            <strong>{projectProgress}%</strong>
           </div>
 
         </div>
@@ -189,14 +262,14 @@ export default function ProjectDetails() {
               </div>
 
               <span className="assigned-team-count">
-                {team.length} Members
+                {displayedTeam.length} Members
               </span>
 
             </div>
 
             <div className="assigned-team-list">
 
-              {team.map((member, index) => (
+              {displayedTeam.map((member, index) => (
 
                 <div
                   className="assigned-member"
@@ -267,7 +340,7 @@ export default function ProjectDetails() {
 
             <div className="project-task-list">
 
-              {tasks.map((task, index) => (
+              {displayedTasks.map((task, index) => (
 
                 <div
                   className="project-task-row"
@@ -338,7 +411,7 @@ export default function ProjectDetails() {
 
               <div className="large-progress-number">
 
-                35%
+                {projectProgress}%
 
               </div>
 
@@ -354,7 +427,7 @@ export default function ProjectDetails() {
 
               <div
                 className="progress-bar-fill"
-                style={{ width: "35%" }}
+                style={{ width: `${projectProgress}%` }}
               />
 
             </div>

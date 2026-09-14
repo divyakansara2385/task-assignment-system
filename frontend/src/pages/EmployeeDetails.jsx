@@ -1,4 +1,6 @@
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { getAssignments, getEmployee, getProjects, getTasks } from "../services/api";
 import {
   ArrowLeft,
   Mail,
@@ -10,60 +12,72 @@ import {
   Users,
 } from "lucide-react";
 
+const fallbackEmployee = {
+  name: "Sarah Johnson",
+  initials: "SJ",
+  role: "Backend Developer",
+  email: "sarah.johnson@company.com",
+  availability: "Available",
+  workload: 45,
+  performance: 94,
+  projects: 2,
+  skills: [
+    "Python",
+    "FastAPI",
+    "PostgreSQL",
+    "REST APIs",
+    "Docker",
+  ],
+};
+
 export default function EmployeeDetails() {
   const navigate = useNavigate();
+  const { id } = useParams();
 
-  const employee = {
-    name: "Sarah Johnson",
-    initials: "SJ",
-    role: "Backend Developer",
-    email: "sarah.johnson@company.com",
-    availability: "Available",
-    workload: 45,
-    performance: 94,
-    projects: 2,
-    skills: [
-      "Python",
-      "FastAPI",
-      "PostgreSQL",
-      "REST APIs",
-      "Docker",
-    ],
-  };
+  const [employee, setEmployee] = useState(fallbackEmployee);
+  const [projects, setProjects] = useState([]);
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(Boolean(id));
+  const [error, setError] = useState("");
 
-  const projects = [
-    {
-      name: "Payment Gateway Integration",
-      progress: 65,
-      status: "In Progress",
-    },
-    {
-      name: "Customer Analytics Platform",
-      progress: 30,
-      status: "In Progress",
-    },
-  ];
+  useEffect(() => {
+    if (!id) return;
 
-  const tasks = [
-    {
-      title: "Design database models",
-      project: "Payment Gateway Integration",
-      status: "Completed",
-    },
-    {
-      title: "Develop authentication APIs",
-      project: "Payment Gateway Integration",
-      status: "In Progress",
-    },
-    {
-      title: "Optimize database queries",
-      project: "Customer Analytics Platform",
-      status: "Pending",
-    },
-  ];
+    Promise.all([getEmployee(id), getAssignments(), getTasks(), getProjects()])
+      .then(([result, assignments, allTasks, allProjects]) => {
+        setEmployee({
+          ...fallbackEmployee,
+          ...result,
+          name: result.name || `Employee ${result.employee_id}`,
+          initials: (result.name || String(result.employee_id)).slice(0, 2).toUpperCase(),
+          availability: (result.availability_pct ?? 0) >= 50 ? "Available" : "Busy",
+          workload: result.current_workload_pct ?? 0,
+          performance: result.performance_score ?? 0,
+        });
+        const employeeAssignments = assignments.filter((assignment) => String(assignment.employee_id) === String(id));
+        const assignedTaskIds = new Set(employeeAssignments.map((assignment) => assignment.task_id));
+        const employeeTasks = allTasks.filter((task) => assignedTaskIds.has(task.task_id));
+        setTasks(employeeTasks.map((task) => ({
+          title: task.task_title || "Untitled task",
+          project: task.project_id,
+          status: employeeAssignments.find((assignment) => assignment.task_id === task.task_id)?.status || "Assigned",
+        })));
+        const projectIds = new Set(allProjects.filter((project) => employeeTasks.some((task) => task.project_id === project.project_id)).map((project) => project.project_id));
+        setProjects([...projectIds].map((projectId) => ({
+          name: projectId,
+          progress: 0,
+          status: "Active",
+        })));
+      })
+      .catch(() => setError("Employee details could not be loaded."))
+      .finally(() => setLoading(false));
+  }, [id]);
 
   return (
     <div className="employee-details-page">
+
+      {loading && <p>Loading employee details...</p>}
+      {error && <p className="form-error">{error}</p>}
 
       {/* Back Button */}
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
@@ -11,12 +11,14 @@ import {
   Sparkles,
   CheckCircle2,
 } from "lucide-react";
+import { createTask, getProjects } from "../services/api";
 
 export default function CreateTask() {
   const navigate = useNavigate();
 
   const [taskTitle, setTaskTitle] = useState("");
   const [project, setProject] = useState("");
+  const [projects, setProjects] = useState([]);
   const [description, setDescription] = useState("");
 
   const [priority, setPriority] = useState("Medium");
@@ -33,6 +35,13 @@ export default function CreateTask() {
   ]);
 
   const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    getProjects()
+      .then(setProjects)
+      .catch(() => setProjects([]));
+  }, []);
 
   const addSkill = () => {
     const skill = skillInput.trim();
@@ -59,20 +68,26 @@ export default function CreateTask() {
     }
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
+    setSubmitted(true);
+    setError("");
 
-    /*
-      Temporary frontend flow.
-
-      Later this button can call your FastAPI endpoint,
-      send the task data, and receive the AI recommendation.
-    */
-
-   setSubmitted(true);
-   setTimeout(() => {
-    navigate("/tasks");
-}, 700);
+    try {
+      const task = await createTask({
+        project_id: project,
+        task_title: taskTitle,
+        task_description: description,
+        project_criticality: criticality,
+        priority: priority.toLowerCase(),
+        estimated_hours: effort ? Number(effort) : undefined,
+        task_due_date: deadline || undefined,
+      });
+      navigate(`/tasks/${task.task_id}`);
+    } catch {
+      setError("Task could not be created. Select a valid project and try again.");
+      setSubmitted(false);
+    }
   };
 
   return (
@@ -117,6 +132,8 @@ export default function CreateTask() {
         {/* ================= BASIC INFORMATION ================= */}
 
         <section className="create-task-card">
+
+          {error && <p className="form-error">{error}</p>}
 
           <div className="create-task-card-header">
 
@@ -179,17 +196,11 @@ export default function CreateTask() {
                   Select project
                 </option>
 
-                <option value="Payment Gateway Integration">
-                  Payment Gateway Integration
-                </option>
-
-                <option value="Customer Analytics Platform">
-                  Customer Analytics Platform
-                </option>
-
-                <option value="Website Revamp">
-                  Website Revamp
-                </option>
+                {projects.map((item) => (
+                  <option key={item.project_id} value={item.project_id}>
+                    {item.project_domain || item.project_id}
+                  </option>
+                ))}
 
               </select>
 

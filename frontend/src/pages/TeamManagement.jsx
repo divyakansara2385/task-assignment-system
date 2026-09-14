@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { getEmployees } from "../services/api";
 import {
   Search,
   Users,
@@ -12,6 +13,16 @@ import {
 export default function TeamManagement() {
   const [search, setSearch] = useState("");
   const navigate = useNavigate();
+  const [apiEmployees, setApiEmployees] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    getEmployees()
+      .then(setApiEmployees)
+      .catch(() => setError("Employee data could not be loaded."))
+      .finally(() => setLoading(false));
+  }, []);
 
   const employees = [
     {
@@ -76,7 +87,18 @@ export default function TeamManagement() {
     },
   ];
 
-  const filteredEmployees = employees.filter((employee) => {
+  const displayedEmployees = apiEmployees?.map((employee) => ({
+    id: employee.employee_id,
+    name: employee.name || `Employee ${employee.employee_id}`,
+    initials: (employee.name || employee.employee_id).slice(0, 2).toUpperCase(),
+    role: employee.role || "Team member",
+    availability: (employee.availability_pct ?? 0) >= 50 ? "Available" : "Busy",
+    workload: employee.current_workload_pct ?? 0,
+    projects: 0,
+    skills: [],
+  })) || employees;
+
+  const filteredEmployees = displayedEmployees.filter((employee) => {
     const searchText = search.toLowerCase();
 
     return (
@@ -88,24 +110,27 @@ export default function TeamManagement() {
     );
   });
 
-  const availableEmployees = employees.filter(
+  const availableEmployees = displayedEmployees.filter(
     (employee) => employee.availability === "Available"
   ).length;
 
   const averageWorkload = Math.round(
-    employees.reduce(
+    displayedEmployees.reduce(
       (total, employee) => total + employee.workload,
       0
-    ) / employees.length
+    ) / displayedEmployees.length
   );
 
-  const totalProjects = employees.reduce(
+  const totalProjects = displayedEmployees.reduce(
     (total, employee) => total + employee.projects,
     0
   );
 
   return (
     <div className="team-management-page">
+
+      {loading && <p>Loading team members...</p>}
+      {error && <p className="form-error">{error}</p>}
 
       {/* ================= HEADER ================= */}
 
@@ -139,7 +164,7 @@ export default function TeamManagement() {
 
           <div>
             <span>Total Employees</span>
-            <strong>{employees.length}</strong>
+            <strong>{displayedEmployees.length}</strong>
           </div>
 
         </div>

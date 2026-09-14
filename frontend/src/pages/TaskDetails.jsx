@@ -1,5 +1,12 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import {
+  createAssignment,
+  getAssignmentRecommendations,
+  getAssignmentHistory,
+  getTask,
+  getTaskAssignments,
+} from "../services/api";
 import {
   ArrowLeft,
   Calendar,
@@ -13,9 +20,13 @@ import {
 
 export default function TaskDetails() {
   const navigate = useNavigate();
+  const { id } = useParams();
   const [assigned, setAssigned] = useState(false);
+  const [assignmentHistory, setAssignmentHistory] = useState([]);
+  const [loading, setLoading] = useState(Boolean(id));
+  const [error, setError] = useState("");
 
-  const task = {
+  const fallbackTask = {
     title: "Develop Authentication APIs",
     project: "Payment Gateway Integration",
     description:
@@ -31,8 +42,9 @@ export default function TaskDetails() {
       "JWT",
     ],
   };
+  const [task, setTask] = useState(fallbackTask);
 
-  const recommendation = {
+  const fallbackRecommendation = {
     name: "Sarah Johnson",
     initials: "SJ",
     role: "Backend Developer",
@@ -47,6 +59,53 @@ export default function TaskDetails() {
       "Strong performance score on similar projects",
     ],
   };
+  const [recommendation, setRecommendation] = useState(fallbackRecommendation);
+
+  useEffect(() => {
+    if (!id) return;
+
+    Promise.all([
+      getTask(id),
+      getAssignmentRecommendations(id),
+      getTaskAssignments(id),
+    ])
+      .then(([taskResult, recommendationResult, assignments]) => {
+        setAssigned(assignments.length > 0);
+        if (assignments[0]) {
+          getAssignmentHistory(assignments[0].assignment_id)
+            .then((result) => setAssignmentHistory(result.history || []))
+            .catch(() => setAssignmentHistory([]));
+        }
+        setTask({
+          ...taskResult,
+          title: taskResult.task_title || "Untitled task",
+          project: taskResult.project_id,
+          description: taskResult.task_description || "",
+          deadline: taskResult.task_due_date || "No deadline",
+          priority: taskResult.priority || "Medium",
+          status: "Pending",
+          requiredSkills: [],
+        });
+
+        const candidate = recommendationResult?.recommendations?.[0]
+          || recommendationResult?.[0];
+        if (candidate) {
+          setRecommendation({
+            name: candidate.employee_name || `Employee ${candidate.employee_id}`,
+            role: "Recommended team member",
+            initials: (candidate.employee_name || candidate.employee_id).slice(0, 2).toUpperCase(),
+            match: candidate.match_score || candidate.score || 0,
+            workload: 100 - (candidate.availability_score || 0),
+            skillsMatched: candidate.skill_match || 0,
+            totalSkills: 100,
+            reasons: candidate.reason ? [candidate.reason] : ["Recommended by assignment model"],
+            employeeId: candidate.employee_id,
+          });
+        }
+      })
+      .catch(() => setError("Task details or recommendations could not be loaded."))
+      .finally(() => setLoading(false));
+  }, [id]);
 
   const alternatives = [
     {
@@ -67,6 +126,9 @@ export default function TaskDetails() {
 
   return (
     <div className="task-details-page">
+
+      {loading && <p>Loading task...</p>}
+      {error && <p className="form-error">{error}</p>}
 
       {/* ================= BACK BUTTON ================= */}
 
@@ -182,6 +244,28 @@ export default function TaskDetails() {
 
             </div>
 
+          </section>
+
+          <section className="task-details-card">
+            <div className="details-card-header">
+              <div>
+                <h2>Assignment History</h2>
+                <p>Recorded status changes for this task</p>
+              </div>
+            </div>
+
+            {assignmentHistory.length === 0 ? (
+              <p>No assignment history recorded.</p>
+            ) : (
+              <div className="task-history-list">
+                {assignmentHistory.map((item) => (
+                  <div className="task-history-item" key={item.history_id}>
+                    <strong>{item.new_status}</strong>
+                    <span>{item.reason || "Status updated"}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
 
           {/* Current Assignment */}
@@ -349,7 +433,16 @@ export default function TaskDetails() {
               className={`assign-ai-button ${
                 assigned ? "assigned" : ""
               }`}
-              onClick={() => setAssigned(true)}
+              onClick={async () => {
+                try {
+                  if (id && recommendation.employeeId) {
+                    await createAssignment(id, recommendation.employeeId);
+                  }
+                  setAssigned(true);
+                } catch {
+                  setError("Assignment could not be created.");
+                }
+              }}
               disabled={assigned}
             >
 

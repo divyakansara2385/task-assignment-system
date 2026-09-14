@@ -1,20 +1,31 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Mail, Lock, Eye, EyeOff, Sparkles } from "lucide-react";
+import { login } from "../services/api";
 
 export default function Login() {
   const navigate = useNavigate();
 
   const [showPassword, setShowPassword] = useState(false);
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
+    setError("");
+    setLoading(true);
 
-    // Temporary frontend login for hackathon UI.
-    // Backend authentication can be connected later.
-    navigate("/dashboard");
+    try {
+      const result = await login(username, password);
+      localStorage.setItem("access_token", result.access_token);
+      navigate("/dashboard");
+    } catch {
+      setError("Unable to sign in. Check your credentials and try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -100,12 +111,14 @@ export default function Login() {
 
           <form onSubmit={handleSubmit}>
 
-            {/* Email */}
+            {error && <p className="form-error">{error}</p>}
+
+            {/* Username */}
 
             <div className="login-field">
 
-              <label htmlFor="email">
-                Email address
+              <label htmlFor="username">
+                Username
               </label>
 
               <div className="login-input-wrapper">
@@ -113,12 +126,12 @@ export default function Login() {
                 <Mail size={17} />
 
                 <input
-                  id="email"
-                  type="email"
-                  placeholder="manager@company.com"
-                  value={email}
+                  id="username"
+                  type="text"
+                  placeholder="Enter your username"
+                  value={username}
                   onChange={(event) =>
-                    setEmail(event.target.value)
+                    setUsername(event.target.value)
                   }
                   required
                 />
@@ -211,10 +224,17 @@ export default function Login() {
               type="submit"
               className="login-submit"
             >
-              Sign In
+              {loading ? "Signing in..." : "Sign In"}
             </button>
 
           </form>
+
+          <p className="auth-switch">
+            Need an account?{" "}
+            <button type="button" onClick={() => navigate("/signup")}>
+              Create one
+            </button>
+          </p>
 
           <div className="login-footer">
 

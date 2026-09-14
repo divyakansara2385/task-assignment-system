@@ -8,33 +8,44 @@ import {
   Activity,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { getAssignments, getProjects, getTasks } from "../services/api";
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const [summary, setSummary] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [projects, setProjects] = useState([]);
 
-  const projects = [
-    {
-      name: "AI Customer Support",
-      team: 5,
-      progress: 72,
-      status: "In Progress",
-      deadline: "Sep 22, 2026",
-    },
-    {
-      name: "Mobile Banking App",
-      team: 4,
-      progress: 45,
-      status: "In Progress",
-      deadline: "Oct 03, 2026",
-    },
-    {
-      name: "Analytics Platform",
-      team: 6,
-      progress: 88,
-      status: "Near Completion",
-      deadline: "Sep 18, 2026",
-    },
-  ];
+  useEffect(() => {
+    Promise.all([getDashboardSummary(), getProjects(), getTasks(), getAssignments()])
+      .then(([dashboardSummary, projectRecords, taskRecords, assignmentRecords]) => {
+        setSummary(dashboardSummary);
+        setProjects(projectRecords.map((project) => {
+          const projectTasks = taskRecords.filter((task) => task.project_id === project.project_id);
+          const projectTaskIds = new Set(projectTasks.map((task) => task.task_id));
+          const projectAssignments = assignmentRecords.filter((assignment) => projectTaskIds.has(assignment.task_id));
+          const progress = projectTasks.length
+            ? Math.round(projectTasks.reduce((total, task) => {
+              if (["COMPLETED", "Completed"].includes(task.status)) return total + 100;
+              if (["IN_PROGRESS", "In Progress"].includes(task.status)) return total + 50;
+              return total;
+            }, 0) / projectTasks.length)
+            : 0;
+
+          return {
+            name: project.project_domain || project.project_id,
+            team: new Set(projectAssignments.map((assignment) => assignment.employee_id)).size,
+            progress,
+            status: progress === 100 ? "Completed" : "In Progress",
+            deadline: project.end_date || "Not specified",
+          };
+        }));
+      })
+      .catch(() => setError("Dashboard data could not be loaded."))
+      .finally(() => setLoading(false));
+  }, []);
 
   const activities = [
     {
@@ -44,7 +55,6 @@ export default function Dashboard() {
     },
     {
       title: "New project created",
-      time: "1 hour ago",
       icon: FolderKanban,
     },
     {
@@ -55,18 +65,19 @@ export default function Dashboard() {
     {
       title: "Team availability updated",
       time: "Yesterday",
-      icon: Users,
     },
   ];
 
   return (
     <div className="dashboard">
 
+      {loading && <p>Loading dashboard...</p>}
+      {error && <p className="form-error">{error}</p>}
+
       {/* Header */}
       <div className="dashboard-header">
         <div>
           <p className="eyebrow">PROJECT MANAGER</p>
-
           <h1>Good morning, Project Manager 👋</h1>
 
           <p className="dashboard-description">
@@ -95,7 +106,7 @@ export default function Dashboard() {
             <span className="summary-trend">+2 this month</span>
           </div>
 
-          <div className="summary-number">12</div>
+          <div className="summary-number">{summary?.projects?.total ?? 12}</div>
           <div className="summary-label">Active Projects</div>
         </div>
 
@@ -108,7 +119,7 @@ export default function Dashboard() {
             <span className="summary-trend">92% utilized</span>
           </div>
 
-          <div className="summary-number">38</div>
+          <div className="summary-number">{summary?.employees?.total ?? 38}</div>
           <div className="summary-label">Team Members</div>
         </div>
 
@@ -121,7 +132,7 @@ export default function Dashboard() {
             <span className="summary-trend">+8.4%</span>
           </div>
 
-          <div className="summary-number">94.2%</div>
+          <div className="summary-number">{summary ? `${summary.success_rate}%` : "94.2%"}</div>
           <div className="summary-label">Average Assignment Score</div>
         </div>
 
@@ -134,7 +145,7 @@ export default function Dashboard() {
             <span className="summary-trend warning">3 urgent</span>
           </div>
 
-          <div className="summary-number">7</div>
+          <div className="summary-number">{summary?.assignments?.active ?? 7}</div>
           <div className="summary-label">Projects Near Deadline</div>
         </div>
 

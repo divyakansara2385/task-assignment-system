@@ -6,6 +6,7 @@ import {
   ChevronDown,
   Sparkles,
 } from "lucide-react";
+import { createProject } from "../services/api";
 
 export default function CreateProject() {
   const navigate = useNavigate();
@@ -17,6 +18,8 @@ export default function CreateProject() {
     deadline: "",
     priority: "medium",
   });
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -27,14 +30,28 @@ export default function CreateProject() {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setSaving(true);
+    setError("");
 
-    // For now, we pass the project data to the next screen.
-    // Later we will replace this with the real backend API call.
-    navigate("/projects/requirements", {
-      state: formData,
-    });
+    try {
+      const project = await createProject({
+        project_id: `PRJ-${Date.now()}`,
+        project_domain: formData.name,
+        project_type: formData.description,
+        priority: formData.priority,
+        end_date: formData.deadline,
+      });
+
+      navigate("/projects/requirements", {
+        state: { ...formData, project_id: project.project_id },
+      });
+    } catch {
+      setError("Project could not be saved. Check that the backend is running.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -106,6 +123,8 @@ export default function CreateProject() {
             Provide basic information about your project to get started.
           </p>
         </div>
+
+        {error && <p className="form-error">{error}</p>}
 
         {/* Project Name */}
         <div className="form-group">
@@ -320,7 +339,7 @@ export default function CreateProject() {
             type="submit"
             className="continue-button"
           >
-            Continue →
+            {saving ? "Saving..." : "Continue →"}
           </button>
 
         </div>
